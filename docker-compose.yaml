@@ -1,0 +1,98 @@
+version: '3.8'
+# ---------------------------------- 
+# Основные сервисы:
+#   - Grafana
+#   - Prometheus
+# Поднимаем для одновременной работы:
+#   - Postgres (отдельно)
+#   - Greenplum (отдельно)
+#   - Kafka (отдельно)
+# Используем для импорта метрик:
+#   - postgres_exporter
+#   - greenplum_exporter
+#   - kafka_exporter
+# ----------------------------------
+#   Создайте вручную volumes (или замените на свои):
+#   prometheus_data, grafana_data, postgres_db, gpdata
+# ----------------------------------
+#   Интерфейс Grafana: http://127.0.0.1:3000
+#   Интерфейс Prometheus: http://127.0.0.1:9090
+#      Проверить наличие работающих: Status --> Targets
+#   Проверить метрики postgres_exporter: http://127.0.0.1:9187/metrics
+#   Проверить метрики greenplum_exporter: http://127.0.0.1:9297/metrics
+#   Проверить метрики kafka_exporter: http://127.0.0.1:9308/metrics
+# ----------------------------------
+services:
+  grafana:
+    image: alexsuf/grafana
+    container_name: grafana
+    environment:
+      TZ: Europe/Moscow
+    ports:
+      - 3000:3000   # http://127.0.0.1:3000
+    depends_on:
+      - prometheus
+    volumes:
+    - grafana_data:/var/lib/grafana
+
+  prometheus:
+      image: alexsuf/prometheus
+      container_name: prometheus
+      environment:
+        TZ: Europe/Moscow
+      depends_on:
+        - postgres_exporter
+        - greenplum_exporter
+      restart: always
+      ports:
+        - 9090:9090  # http://127.0.0.1:9090
+      volumes:
+        - ./prometheus.yml:/etc/prometheus/prometheus.yml
+        - ./prometheus.yml:/usr/local/prometheus/prometheus.yml
+        - prometheus_data:/prometheus
+
+  postgres_exporter:
+    image: alexsuf/postgres_exporter
+    container_name: postgres_exporter
+    restart: always
+    ports:
+      - 9187:9187
+    environment:
+      TZ: Europe/Moscow
+      DATA_SOURCE_NAME: postgres://postgres:secret@host.docker.internal:1111/shop?sslmode=disable
+
+  greenplum_exporter:
+    image: alexsuf/greenplum_exporter
+    container_name: greenplum_exporter
+    restart: always
+    ports:
+      - 9297:9297
+    environment:
+      TZ: Europe/Moscow
+      GPDB_DATA_SOURCE_URL: postgres://gpadmin:gpadmin@host.docker.internal:2222/postgres?sslmode=disable
+
+  kafka_exporter:
+    image: alexsuf/kafka_exporter
+    container_name: kafka_exporter
+    restart: always
+    environment:
+      TZ: Europe/Moscow
+    ports:
+      - 9308:9308
+    command: --kafka.server=host.docker.internal:9092
+
+  node_exporter:
+    image: prom/node-exporter
+    container_name: node_exporter
+    restart: always
+    ports:
+      - 9100:9100
+    environment:
+      TZ: Europe/Moscow
+
+
+volumes:
+  prometheus_data:
+    external: true
+  grafana_data:
+    external: true
